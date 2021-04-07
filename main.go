@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strings"
 	"syscall"
 
 	"github.com/kelseyhightower/envconfig"
@@ -155,7 +156,7 @@ func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.V
 func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initContainers []corev1.Container) jsonpatch.JsonPatchOperation {
 	for _, img := range s.config.InitContainerImages {
 		initContainers = append(initContainers, corev1.Container{
-			Name:            path.Base(img),
+			Name:            nameOf(img),
 			Env:             append(s.config.GetOrResolveEnvs(), corev1.EnvVar{Name: s.config.NSURLEnvName, Value: v}),
 			Image:           img,
 			ImagePullPolicy: corev1.PullIfNotPresent,
@@ -168,7 +169,7 @@ func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initConta
 func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []corev1.Container) jsonpatch.JsonPatchOperation {
 	for _, img := range s.config.ContainerImages {
 		containers = append(containers, corev1.Container{
-			Name:            path.Base(img),
+			Name:            nameOf(img),
 			Env:             append(s.config.GetOrResolveEnvs(), corev1.EnvVar{Name: s.config.NSURLEnvName, Value: v}),
 			Image:           img,
 			ImagePullPolicy: corev1.PullIfNotPresent,
@@ -176,6 +177,10 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []
 		s.addVolumeMounts(&containers[len(containers)-1])
 	}
 	return jsonpatch.NewOperation("add", path.Join(p, "containers"), containers)
+}
+
+func nameOf(img string) string {
+	return strings.Split(path.Base(img), ":")[0]
 }
 
 func (s *admissionWebhookServer) addVolumeMounts(c *corev1.Container) {
