@@ -271,7 +271,6 @@ func main() {
 	}()
 
 	s := echo.New()
-
 	s.Use(middleware.Logger())
 	s.Use(middleware.Recover())
 
@@ -302,6 +301,9 @@ func main() {
 		_, err = c.Response().Write(response)
 
 		return err
+	})
+	s.GET("/ready", func(c echo.Context) error {
+		return c.NoContent(http.StatusOK)
 	})
 
 	var startServerErr = make(chan error)
