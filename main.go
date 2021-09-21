@@ -167,7 +167,7 @@ func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.V
 	return jsonpatch.NewOperation("add", path.Join(p, "volumes"), volumes)
 }
 
-func parseInterfacePools(v string, logger *zap.SugaredLogger) map[string]int {
+func parseSRIOVLabels(v string, logger *zap.SugaredLogger) map[string]int {
 	networkServices := []*url.URL{}
 	poolResources := make(map[string]int)
 
@@ -198,7 +198,7 @@ func parseInterfacePools(v string, logger *zap.SugaredLogger) map[string]int {
 }
 
 func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initContainers []corev1.Container) jsonpatch.JsonPatchOperation {
-	poolResources := parseInterfacePools(v, s.logger)
+	poolResources := parseSRIOVLabels(v, s.logger)
 	for _, img := range s.config.InitContainerImages {
 		initContainers = append(initContainers, corev1.Container{
 			Name:            nameOf(img),
