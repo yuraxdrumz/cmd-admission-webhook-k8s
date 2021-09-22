@@ -167,8 +167,8 @@ func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.V
 	return jsonpatch.NewOperation("add", path.Join(p, "volumes"), volumes)
 }
 
-func parseSRIOVLabels(v string, logger *zap.SugaredLogger) map[string]int {
-	networkServices := []*url.URL{}
+func parseResources(v string, logger *zap.SugaredLogger) map[string]int {
+	var nsmURLs []*nsurl.NSURL
 	poolResources := make(map[string]int)
 
 	for _, rawNetNS := range strings.Split(v, ",") {
@@ -178,12 +178,11 @@ func parseSRIOVLabels(v string, logger *zap.SugaredLogger) map[string]int {
 			logger.Errorf("Malformed NS annotation: %+v", rawNetNS)
 			return nil
 		}
-		networkServices = append(networkServices, netNS)
+		nsmURLs = append(nsmURLs, (*nsurl.NSURL)(netNS))
 	}
 
-	for _, networkService := range networkServices {
-		u := (*nsurl.NSURL)(networkService)
-		labels := u.Labels()
+	for _, nsmURL := range nsmURLs {
+		labels := nsmURL.Labels()
 		if _, ok := labels["sriovToken"]; ok {
 			interfacePools := strings.Split(labels["sriovToken"], ",")
 			if _, ok := poolResources[interfacePools[0]]; !ok {
@@ -198,7 +197,7 @@ func parseSRIOVLabels(v string, logger *zap.SugaredLogger) map[string]int {
 }
 
 func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initContainers []corev1.Container) jsonpatch.JsonPatchOperation {
-	poolResources := parseSRIOVLabels(v, s.logger)
+	poolResources := parseResources(v, s.logger)
 	for _, img := range s.config.InitContainerImages {
 		initContainers = append(initContainers, corev1.Container{
 			Name:            nameOf(img),
