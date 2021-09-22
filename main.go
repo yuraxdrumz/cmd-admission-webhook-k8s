@@ -171,24 +171,20 @@ func parseResources(v string, logger *zap.SugaredLogger) map[string]int {
 	var nsmURLs []*nsurl.NSURL
 	poolResources := make(map[string]int)
 
-	for _, rawNetNS := range strings.Split(v, ",") {
-		netNS, err := url.Parse(rawNetNS)
+	for _, rawURL := range strings.Split(v, ",") {
+		u, err := url.Parse(rawURL)
 
 		if err != nil {
-			logger.Errorf("Malformed NS annotation: %+v", rawNetNS)
+			logger.Errorf("Malformed NS annotation: %+v", rawURL)
 			return nil
 		}
-		nsmURLs = append(nsmURLs, (*nsurl.NSURL)(netNS))
+		nsmURLs = append(nsmURLs, (*nsurl.NSURL)(u))
 	}
 
 	for _, nsmURL := range nsmURLs {
 		labels := nsmURL.Labels()
 		if _, ok := labels["sriovToken"]; ok {
 			interfacePools := strings.Split(labels["sriovToken"], ",")
-			if _, ok := poolResources[interfacePools[0]]; !ok {
-				poolResources[interfacePools[0]] = 1
-				continue
-			}
 			poolResources[interfacePools[0]]++
 		}
 	}
