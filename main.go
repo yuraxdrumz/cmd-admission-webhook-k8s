@@ -22,9 +22,11 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -43,6 +45,7 @@ import (
 
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/config"
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/k8s"
+	"github.com/networkservicemesh/sdk/pkg/tools/nsurl"
 )
 
 var deserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
@@ -164,7 +167,33 @@ func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.V
 	return jsonpatch.NewOperation("add", path.Join(p, "volumes"), volumes)
 }
 
+func parseResources(v string, logger *zap.SugaredLogger) map[string]int {
+	var nsmURLs []*nsurl.NSURL
+	poolResources := make(map[string]int)
+
+	for _, rawURL := range strings.Split(v, ",") {
+		u, err := url.Parse(rawURL)
+
+		if err != nil {
+			logger.Errorf("Malformed NS annotation: %+v", rawURL)
+			return nil
+		}
+		nsmURLs = append(nsmURLs, (*nsurl.NSURL)(u))
+	}
+
+	for _, nsmURL := range nsmURLs {
+		labels := nsmURL.Labels()
+		if _, ok := labels["sriovToken"]; ok {
+			interfacePools := strings.Split(labels["sriovToken"], ",")
+			poolResources[interfacePools[0]]++
+		}
+	}
+
+	return poolResources
+}
+
 func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initContainers []corev1.Container) jsonpatch.JsonPatchOperation {
+	poolResources := parseResources(v, s.logger)
 	for _, img := range s.config.InitContainerImages {
 		initContainers = append(initContainers, corev1.Container{
 			Name:            nameOf(img),
@@ -173,6 +202,7 @@ func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initConta
 			ImagePullPolicy: corev1.PullIfNotPresent,
 		})
 		s.addVolumeMounts(&initContainers[len(initContainers)-1])
+		s.addResources(&initContainers[len(initContainers)-1], poolResources)
 	}
 	return jsonpatch.NewOperation("add", path.Join(p, "initContainers"), initContainers)
 }
@@ -209,6 +239,15 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []
 
 func nameOf(img string) string {
 	return strings.Split(path.Base(img), ":")[0]
+}
+
+func (s *admissionWebhookServer) addResources(c *corev1.Container, r map[string]int) {
+	for key, value := range r {
+		if c.Resources.Limits == nil {
+			c.Resources.Limits = make(map[corev1.ResourceName]resource.Quantity)
+		}
+		c.Resources.Limits[corev1.ResourceName(key)] = resource.MustParse(strconv.Itoa(value))
+	}
 }
 
 func (s *admissionWebhookServer) addVolumeMounts(c *corev1.Container) {
