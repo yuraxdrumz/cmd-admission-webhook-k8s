@@ -60,7 +60,7 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		UID: in.UID,
 	}
 
-	s.logger.Infof("Icomming request: %+v", in)
+	s.logger.Infof("Incoming request: %+v", in)
 	defer s.logger.Infof("Outgoing response: %+v", resp)
 
 	if in.Operation != admissionv1.Create {
@@ -68,18 +68,19 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 
-	p, annotations, spec := s.unmarshal(in)
+	p, metaPtr, spec := s.unmarshal(in)
 	if spec == nil {
 		resp.Allowed = true
 		return resp
 	}
-	annotation := annotations[s.config.Annotation]
+	annotation := metaPtr.Annotations[s.config.Annotation]
 
 	if annotation != "" {
 		bytes, err := json.Marshal([]jsonpatch.JsonPatchOperation{
 			s.createInitContainerPatch(p, annotation, spec.InitContainers),
 			s.createContainerPatch(p, annotation, spec.Containers),
 			s.createVolumesPatch(p, spec.Volumes),
+			s.createLabelPatch(p, metaPtr.Labels),
 		})
 		if err != nil {
 			resp.Result = &v1.Status{
@@ -96,31 +97,31 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 	return resp
 }
 
-func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p string, annotations map[string]string, spec *corev1.PodSpec) {
+func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p string, meta *v1.ObjectMeta, spec *corev1.PodSpec) {
 	var podSpec *corev1.PodSpec
-	var annotationsPtr *map[string]string
+	var metaPtr *v1.ObjectMeta
 	var target interface{}
-	p = "/spec/template/spec"
+	p = "/spec/template"
 	switch in.Kind.Kind {
 	case "Deployment":
 		var deployment appsv1.Deployment
-		annotationsPtr = &deployment.Annotations
+		metaPtr = &deployment.Spec.Template.ObjectMeta
 		podSpec = &deployment.Spec.Template.Spec
 		target = &deployment
 	case "Pod":
 		var pod corev1.Pod
-		p = "/spec/"
-		annotationsPtr = &pod.Annotations
+		p = ""
+		metaPtr = &pod.ObjectMeta
 		podSpec = &pod.Spec
 		target = &pod
 	case "DaemonSet":
 		var daemonSet appsv1.DaemonSet
-		annotationsPtr = &daemonSet.Annotations
+		metaPtr = &daemonSet.Spec.Template.ObjectMeta
 		podSpec = &daemonSet.Spec.Template.Spec
 		target = &daemonSet
 	case "StatefulSet":
 		var statefulSet appsv1.StatefulSet
-		annotationsPtr = &statefulSet.Annotations
+		metaPtr = &statefulSet.Spec.Template.ObjectMeta
 		podSpec = &statefulSet.Spec.Template.Spec
 		target = &statefulSet
 	default:
@@ -130,7 +131,7 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 	if err := json.Unmarshal(in.Object.Raw, target); err != nil {
 		return "", nil, nil
 	}
-	return p, *annotationsPtr, podSpec
+	return p, metaPtr, podSpec
 }
 
 func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.Volume) jsonpatch.JsonPatchOperation {
@@ -164,7 +165,7 @@ func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.V
 			},
 		},
 	)
-	return jsonpatch.NewOperation("add", path.Join(p, "volumes"), volumes)
+	return jsonpatch.NewOperation("add", addToPath(p, "spec", "volumes"), volumes)
 }
 
 func parseResources(v string, logger *zap.SugaredLogger) map[string]int {
@@ -204,7 +205,7 @@ func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initConta
 		s.addVolumeMounts(&initContainers[len(initContainers)-1])
 		s.addResources(&initContainers[len(initContainers)-1], poolResources)
 	}
-	return jsonpatch.NewOperation("add", path.Join(p, "initContainers"), initContainers)
+	return jsonpatch.NewOperation("add", addToPath(p, "spec", "initContainers"), initContainers)
 }
 
 func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []corev1.Container) jsonpatch.JsonPatchOperation {
@@ -234,7 +235,7 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []
 			MountPath: "/etc/coredns",
 		}},
 	})
-	return jsonpatch.NewOperation("add", path.Join(p, "containers"), containers)
+	return jsonpatch.NewOperation("add", addToPath(p, "spec", "containers"), containers)
 }
 
 func nameOf(img string) string {
@@ -264,6 +265,20 @@ func (s *admissionWebhookServer) addVolumeMounts(c *corev1.Container) {
 		ReadOnly:  false,
 		MountPath: "/etc/coredns",
 	})
+}
+
+func (s *admissionWebhookServer) createLabelPatch(p string, v map[string]string) jsonpatch.JsonPatchOperation {
+	for key, value := range s.config.Labels {
+		v[key] = value
+	}
+	return jsonpatch.NewOperation("add", addToPath(p, "metadata", "labels"), v)
+}
+
+func addToPath(p string, v ...string) string {
+	if p == "" {
+		return path.Join(append([]string{"/"}, v...)...)
+	}
+	return path.Join(append([]string{p}, v...)...)
 }
 
 func main() {
