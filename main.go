@@ -131,7 +131,7 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 	if err := json.Unmarshal(in.Object.Raw, target); err != nil {
 		return "", nil, nil
 	}
-      p = path.Join("/", p)
+	p = path.Join("/", p)
 	return p, metaPtr, podSpec
 }
 
@@ -274,7 +274,6 @@ func (s *admissionWebhookServer) createLabelPatch(p string, v map[string]string)
 	}
 	return jsonpatch.NewOperation("add", path.Join(p, "metadata", "labels"), v)
 }
-
 
 func main() {
 	prod, err := zap.NewProduction()
