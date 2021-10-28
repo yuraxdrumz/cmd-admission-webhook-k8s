@@ -131,6 +131,7 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 	if err := json.Unmarshal(in.Object.Raw, target); err != nil {
 		return "", nil, nil
 	}
+      p = path.Join("/", p)
 	return p, metaPtr, podSpec
 }
 
@@ -165,7 +166,7 @@ func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.V
 			},
 		},
 	)
-	return jsonpatch.NewOperation("add", addToPath(p, "spec", "volumes"), volumes)
+	return jsonpatch.NewOperation("add", path.Join(p, "spec", "volumes"), volumes)
 }
 
 func parseResources(v string, logger *zap.SugaredLogger) map[string]int {
@@ -205,7 +206,7 @@ func (s *admissionWebhookServer) createInitContainerPatch(p, v string, initConta
 		s.addVolumeMounts(&initContainers[len(initContainers)-1])
 		s.addResources(&initContainers[len(initContainers)-1], poolResources)
 	}
-	return jsonpatch.NewOperation("add", addToPath(p, "spec", "initContainers"), initContainers)
+	return jsonpatch.NewOperation("add", path.Join(p, "spec", "initContainers"), initContainers)
 }
 
 func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []corev1.Container) jsonpatch.JsonPatchOperation {
@@ -235,7 +236,7 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []
 			MountPath: "/etc/coredns",
 		}},
 	})
-	return jsonpatch.NewOperation("add", addToPath(p, "spec", "containers"), containers)
+	return jsonpatch.NewOperation("add", path.Join(p, "spec", "containers"), containers)
 }
 
 func nameOf(img string) string {
@@ -271,15 +272,9 @@ func (s *admissionWebhookServer) createLabelPatch(p string, v map[string]string)
 	for key, value := range s.config.Labels {
 		v[key] = value
 	}
-	return jsonpatch.NewOperation("add", addToPath(p, "metadata", "labels"), v)
+	return jsonpatch.NewOperation("add", path.Join(p, "metadata", "labels"), v)
 }
 
-func addToPath(p string, v ...string) string {
-	if p == "" {
-		return path.Join(append([]string{"/"}, v...)...)
-	}
-	return path.Join(append([]string{p}, v...)...)
-}
 
 func main() {
 	prod, err := zap.NewProduction()
