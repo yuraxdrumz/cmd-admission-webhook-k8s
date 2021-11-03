@@ -8,7 +8,7 @@ require (
 	github.com/labstack/gommon v0.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/networkservicemesh/sdk v0.5.1-0.20211102193303-a94a249e2f5f
+	github.com/networkservicemesh/sdk v0.5.1-0.20211103084119-5bcf896b3c2a
 	github.com/valyala/fasttemplate v1.2.1 // indirect
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
