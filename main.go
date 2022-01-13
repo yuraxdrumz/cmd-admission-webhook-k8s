@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Doc.ai and/or its affiliates.
+// Copyright (c) 2021-2022 Doc.ai and/or its affiliates.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -46,6 +46,7 @@ import (
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/config"
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/k8s"
 	"github.com/networkservicemesh/sdk/pkg/tools/nsurl"
+	"github.com/networkservicemesh/sdk/pkg/tools/opentelemetry"
 )
 
 var deserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
@@ -304,6 +305,19 @@ func main() {
 		syscall.SIGQUIT,
 	)
 	defer cancel()
+
+	// Configure Open Telemetry
+	if opentelemetry.IsEnabled() {
+		collectorAddress := conf.OpenTelemetryCollectorURL
+		spanExporter := opentelemetry.InitSpanExporter(ctx, collectorAddress)
+		metricExporter := opentelemetry.InitMetricExporter(ctx, collectorAddress)
+		o := opentelemetry.Init(ctx, spanExporter, metricExporter, "admission-webhook-k8s")
+		defer func() {
+			if err = o.Close(); err != nil {
+				logger.Fatal(err)
+			}
+		}()
+	}
 
 	var registerClient = k8s.AdmissionWebhookRegisterClient{
 		Logger: logger.Named("admissionWebhookRegisterClient"),
