@@ -36,23 +36,23 @@ import (
 
 // Config represents env configuration for cmd-admission-webhook-k8s
 type Config struct {
-	Name                      string            `default:"admission-webhook-k8s" desc:"Name of current admission webhook instance" split_words:"true"`
-	ServiceName               string            `default:"default" desc:"Name of service that related to this admission webhook instance" split_words:"true"`
-	Namespace                 string            `default:"default" desc:"Namespace where admission webhook is deployed" split_words:"true"`
-	Annotation                string            `default:"networkservicemesh.io" desc:"Name of annotation that means that the resource can be handled by admission-webhook" split_words:"true"`
-	Labels                    map[string]string `default:"" desc:"Map of labels and their values that should be appended for each deployment that has Config.Annotation" split_words:"true"`
-	NSURLEnvName              string            `default:"NSM_NETWORK_SERVICES" desc:"Name of env that contains NSURL in initContainers/Containers" split_words:"true"`
-	InitContainerImages       []string          `desc:"List of init containers that should be appended for each deployment that has Config.Annotation" split_words:"true"`
-	ContainerImages           []string          `desc:"List of containers that should be appended for each deployment that has Config.Annotation" split_words:"true"`
-	Envs                      []string          `desc:"Additional Envs that should be appended for each Config.ContainerImages and Config.InitContainerImages" split_words:"true"`
-	CertFilePath              string            `desc:"Path to certificate" split_words:"true"`
-	KeyFilePath               string            `desc:"Path to RSA/Ed25519 related to Config.CertFilePath" split_words:"true"`
-	CABundleFilePath          string            `desc:"Path to cabundle file related to Config.CertFilePath" split_words:"true"`
-	OpenTelemetryCollectorURL string            `default:"otel-collector.observability.svc.cluster.local:4317" desc:"OpenTelemetry Collector URL"`
-	envs                      []corev1.EnvVar
-	caBundle                  []byte
-	cert                      tls.Certificate
-	once                      sync.Once
+	Name                  string            `default:"admission-webhook-k8s" desc:"Name of current admission webhook instance" split_words:"true"`
+	ServiceName           string            `default:"default" desc:"Name of service that related to this admission webhook instance" split_words:"true"`
+	Namespace             string            `default:"default" desc:"Namespace where admission webhook is deployed" split_words:"true"`
+	Annotation            string            `default:"networkservicemesh.io" desc:"Name of annotation that means that the resource can be handled by admission-webhook" split_words:"true"`
+	Labels                map[string]string `default:"" desc:"Map of labels and their values that should be appended for each deployment that has Config.Annotation" split_words:"true"`
+	NSURLEnvName          string            `default:"NSM_NETWORK_SERVICES" desc:"Name of env that contains NSURL in initContainers/Containers" split_words:"true"`
+	InitContainerImages   []string          `desc:"List of init containers that should be appended for each deployment that has Config.Annotation" split_words:"true"`
+	ContainerImages       []string          `desc:"List of containers that should be appended for each deployment that has Config.Annotation" split_words:"true"`
+	Envs                  []string          `desc:"Additional Envs that should be appended for each Config.ContainerImages and Config.InitContainerImages" split_words:"true"`
+	CertFilePath          string            `desc:"Path to certificate" split_words:"true"`
+	KeyFilePath           string            `desc:"Path to RSA/Ed25519 related to Config.CertFilePath" split_words:"true"`
+	CABundleFilePath      string            `desc:"Path to cabundle file related to Config.CertFilePath" split_words:"true"`
+	OpenTelemetryEndpoint string            `default:"otel-collector.observability.svc.cluster.local:4317" desc:"OpenTelemetry Collector Endpoint"`
+	envs                  []corev1.EnvVar
+	caBundle              []byte
+	cert                  tls.Certificate
+	once                  sync.Once
 }
 
 // GetOrResolveEnvs converts on the first call passed Config.Envs into []corev1.EnvVar or returns parsed values.

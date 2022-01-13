@@ -308,13 +308,13 @@ func main() {
 
 	// Configure Open Telemetry
 	if opentelemetry.IsEnabled() {
-		collectorAddress := conf.OpenTelemetryCollectorURL
+		collectorAddress := conf.OpenTelemetryEndpoint
 		spanExporter := opentelemetry.InitSpanExporter(ctx, collectorAddress)
 		metricExporter := opentelemetry.InitMetricExporter(ctx, collectorAddress)
-		o := opentelemetry.Init(ctx, spanExporter, metricExporter, "admission-webhook-k8s")
+		o := opentelemetry.Init(ctx, spanExporter, metricExporter, conf.Name)
 		defer func() {
 			if err = o.Close(); err != nil {
-				logger.Fatal(err)
+				logger.Error(err.Error())
 			}
 		}()
 	}
