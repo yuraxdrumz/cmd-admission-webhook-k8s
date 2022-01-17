@@ -15,6 +15,7 @@ import (
 	_ "github.com/labstack/echo/v4"
 	_ "github.com/labstack/echo/v4/middleware"
 	_ "github.com/networkservicemesh/sdk/pkg/tools/nsurl"
+	_ "github.com/networkservicemesh/sdk/pkg/tools/opentelemetry"
 	_ "go.uber.org/zap"
 	_ "gomodules.xyz/jsonpatch/v2"
 	_ "io/ioutil"
