@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/labstack/echo/v4 v4.6.1
-	github.com/networkservicemesh/sdk v0.5.1-0.20220315002012-985d4a0f3ada
+	github.com/networkservicemesh/sdk v0.5.1-0.20220316101237-288caa7bbc1c
 	go.uber.org/zap v1.16.0
 	gomodules.xyz/jsonpatch/v2 v2.1.0
 	google.golang.org/genproto v0.0.0-20211129164237-f09f9a12af12 // indirect
