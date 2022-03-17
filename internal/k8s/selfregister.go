@@ -1,4 +1,6 @@
-// Copyright (c) 2021 Doc.ai and/or its affiliates.
+// Copyright (c) 2022 Doc.ai and/or its affiliates.
+//
+// Copyright (c) 2022 Cisco and/or its affiliates.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -24,6 +26,7 @@ import (
 
 	"go.uber.org/zap"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	admissionregistrationv1 "k8s.io/client-go/kubernetes/typed/admissionregistration/v1"
@@ -56,6 +59,22 @@ func (a *AdmissionWebhookRegisterClient) Register(ctx context.Context, c *config
 	a.once.Do(a.initializeClient)
 	a.Logger.Infof("Starting to register MutatingWebhookConfiguration based config: %#v", c)
 	defer a.Logger.Infof("Register for config %#v is done", c)
+
+	// When node is restarted, all apps started in pods with old names.
+	// Then we already have configuration with the same name but it can't be reused
+	// because it contains different certs (certs are regenerated on every program restart)
+	_, errExisting := a.client.MutatingWebhookConfigurations().Get(ctx, c.Name, metav1.GetOptions{})
+	if errExisting == nil {
+		a.Logger.Infof("Found existing MutatingWebhookConfiguration %s, unregistering", c.Name)
+		err := a.Unregister(ctx, c)
+		if err != nil {
+			return err
+		}
+	} else if !apierrors.IsNotFound(errExisting) {
+		a.Logger.Errorf("Failed to search for existing MutatingWebhookConfiguration %s", c.Name)
+		return errExisting
+	}
+
 	path := "/mutate"
 	policy := admissionv1.Fail
 	sideEffects := admissionv1.SideEffectClassNone
