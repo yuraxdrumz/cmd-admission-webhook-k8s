@@ -23,6 +23,7 @@ import (
 	_ "k8s.io/api/admissionregistration/v1"
 	_ "k8s.io/api/apps/v1"
 	_ "k8s.io/api/core/v1"
+	_ "k8s.io/apimachinery/pkg/api/errors"
 	_ "k8s.io/apimachinery/pkg/api/resource"
 	_ "k8s.io/apimachinery/pkg/apis/meta/v1"
 	_ "k8s.io/apimachinery/pkg/runtime"
