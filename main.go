@@ -222,7 +222,7 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []
 	}
 	containers = append(containers, corev1.Container{
 		Name:            "coredns",
-		Image:           "networkservicemesh/coredns:master",
+		Image:           s.config.CorednsSidecarImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args:            []string{"-conf", "/etc/coredns/Corefile"},
 		Resources: corev1.ResourceRequirements{
