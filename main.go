@@ -228,7 +228,7 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("100m"),
-				corev1.ResourceMemory: resource.MustParse("15Mi"),
+				corev1.ResourceMemory: resource.MustParse("30Mi"),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{{
