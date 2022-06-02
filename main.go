@@ -133,6 +133,9 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		return "", nil, nil
 	}
 	p = path.Join("/", p)
+	if metaPtr.Labels == nil {
+		metaPtr.Labels = make(map[string]string)
+	}
 	return p, metaPtr, podSpec
 }
 
