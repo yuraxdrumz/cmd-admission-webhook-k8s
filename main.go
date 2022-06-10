@@ -125,6 +125,11 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		metaPtr = &statefulSet.Spec.Template.ObjectMeta
 		podSpec = &statefulSet.Spec.Template.Spec
 		target = &statefulSet
+	case "ReplicaSet":
+		var replicaSet appsv1.ReplicaSet
+		metaPtr = &replicaSet.Spec.Template.ObjectMeta
+		podSpec = &replicaSet.Spec.Template.Spec
+		target = &replicaSet
 	default:
 		return "", nil, nil
 	}
