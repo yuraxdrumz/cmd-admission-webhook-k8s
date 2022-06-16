@@ -56,6 +56,12 @@ type admissionWebhookServer struct {
 	logger *zap.SugaredLogger
 }
 
+const (
+	deploymentKind string = "Deployment"
+	podKind        string = "Pod"
+	replicaSetKind string = "ReplicaSet"
+)
+
 func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
 	var resp = &admissionv1.AdmissionResponse{
 		UID: in.UID,
@@ -100,34 +106,43 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 
 func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p string, meta *v1.ObjectMeta, spec *corev1.PodSpec) {
 	var podSpec *corev1.PodSpec
+	var podMetaPtr *v1.ObjectMeta
 	var metaPtr *v1.ObjectMeta
 	var target interface{}
 	p = "/spec/template"
 
 	switch in.Kind.Kind {
-	case "Deployment":
-		return "", nil, nil
-	case "Pod":
+	case deploymentKind:
+		var deployment appsv1.Deployment
+		metaPtr = &deployment.ObjectMeta
+		podMetaPtr = &deployment.Spec.Template.ObjectMeta
+		podSpec = &deployment.Spec.Template.Spec
+		target = &deployment
+	case podKind:
 		var pod corev1.Pod
 		p = ""
-		metaPtr = &pod.ObjectMeta
+		podMetaPtr = &pod.ObjectMeta
 		podSpec = &pod.Spec
 		target = &pod
 	case "DaemonSet":
 		var daemonSet appsv1.DaemonSet
 		metaPtr = &daemonSet.ObjectMeta
+		podMetaPtr = &daemonSet.Spec.Template.ObjectMeta
 		podSpec = &daemonSet.Spec.Template.Spec
 		target = &daemonSet
 	case "StatefulSet":
 		var statefulSet appsv1.StatefulSet
 		metaPtr = &statefulSet.ObjectMeta
+		podMetaPtr = &statefulSet.Spec.Template.ObjectMeta
 		podSpec = &statefulSet.Spec.Template.Spec
 		target = &statefulSet
-	case "ReplicaSet":
-		var replicaSet appsv1.StatefulSet
+	case replicaSetKind:
+		var replicaSet appsv1.ReplicaSet
 		metaPtr = &replicaSet.ObjectMeta
+		podMetaPtr = &replicaSet.Spec.Template.ObjectMeta
 		podSpec = &replicaSet.Spec.Template.Spec
 		target = &replicaSet
+
 	default:
 		return "", nil, nil
 	}
@@ -136,10 +151,37 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		return "", nil, nil
 	}
 	p = path.Join("/", p)
-	if metaPtr.Labels == nil {
-		metaPtr.Labels = make(map[string]string)
+	if podMetaPtr.Labels == nil {
+		podMetaPtr.Labels = make(map[string]string)
 	}
-	return p, metaPtr, podSpec
+	// Annotations shouldn't be applied second time.
+	if isReplicaOwnedByDeployment(in.Kind.Kind, metaPtr) {
+		return "", nil, nil
+	}
+	updatePodAnnotations(in.Kind.Kind, metaPtr, podMetaPtr)
+
+	return p, podMetaPtr, podSpec
+}
+
+func isReplicaOwnedByDeployment(kind string, metaPtr *v1.ObjectMeta) bool {
+	if kind == replicaSetKind {
+		for _, o := range metaPtr.OwnerReferences {
+			if o.Kind == deploymentKind {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func updatePodAnnotations(kind string, metaPtr, podMetaPtr *v1.ObjectMeta) {
+	if kind != podKind && metaPtr.Annotations != nil {
+		if podMetaPtr.Annotations == nil {
+			podMetaPtr.Annotations = metaPtr.Annotations
+		}
+		err := errors.New("can't register a sink factory for empty string")
+		panic(err.Error())
+	}
 }
 
 func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.Volume) jsonpatch.JsonPatchOperation {
