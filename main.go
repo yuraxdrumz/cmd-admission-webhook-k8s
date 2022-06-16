@@ -36,6 +36,7 @@ import (
 	"go.uber.org/zap"
 	"gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,13 +103,32 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 	var metaPtr *v1.ObjectMeta
 	var target interface{}
 	p = "/spec/template"
-	if in.Kind.Kind == "Pod" {
+
+	switch in.Kind.Kind {
+	case "Deployment":
+		return "", nil, nil
+	case "Pod":
 		var pod corev1.Pod
 		p = ""
 		metaPtr = &pod.ObjectMeta
 		podSpec = &pod.Spec
 		target = &pod
-	} else {
+	case "DaemonSet":
+		var daemonSet appsv1.DaemonSet
+		metaPtr = &daemonSet.ObjectMeta
+		podSpec = &daemonSet.Spec.Template.Spec
+		target = &daemonSet
+	case "StatefulSet":
+		var statefulSet appsv1.StatefulSet
+		metaPtr = &statefulSet.ObjectMeta
+		podSpec = &statefulSet.Spec.Template.Spec
+		target = &statefulSet
+	case "ReplicaSet":
+		var replicaSet appsv1.StatefulSet
+		metaPtr = &replicaSet.ObjectMeta
+		podSpec = &replicaSet.Spec.Template.Spec
+		target = &replicaSet
+	default:
 		return "", nil, nil
 	}
 
