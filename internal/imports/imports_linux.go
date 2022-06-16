@@ -10,6 +10,7 @@ import (
 	_ "crypto/x509/pkix"
 	_ "encoding/json"
 	_ "encoding/pem"
+	_ "errors"
 	_ "fmt"
 	_ "github.com/kelseyhightower/envconfig"
 	_ "github.com/labstack/echo/v4"
