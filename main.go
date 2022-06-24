@@ -160,15 +160,6 @@ func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.V
 				},
 			},
 		},
-		corev1.Volume{
-			Name: "coredns",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{
-					Medium:    corev1.StorageMediumDefault,
-					SizeLimit: nil,
-				},
-			},
-		},
 	)
 	return jsonpatch.NewOperation("add", path.Join(p, "spec", "volumes"), volumes)
 }
@@ -223,23 +214,6 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, containers []
 		})
 		s.addVolumeMounts(&containers[len(containers)-1])
 	}
-	containers = append(containers, corev1.Container{
-		Name:            "coredns",
-		Image:           s.config.CorednsSidecarImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
-		Args:            []string{"-conf", "/etc/coredns/Corefile"},
-		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("100m"),
-				corev1.ResourceMemory: resource.MustParse("30Mi"),
-			},
-		},
-		VolumeMounts: []corev1.VolumeMount{{
-			ReadOnly:  false,
-			Name:      "coredns",
-			MountPath: "/etc/coredns",
-		}},
-	})
 	return jsonpatch.NewOperation("add", path.Join(p, "spec", "containers"), containers)
 }
 
@@ -265,10 +239,6 @@ func (s *admissionWebhookServer) addVolumeMounts(c *corev1.Container) {
 		Name:      "nsm-socket",
 		MountPath: "/var/lib/networkservicemesh",
 		ReadOnly:  true,
-	}, corev1.VolumeMount{
-		Name:      "coredns",
-		ReadOnly:  false,
-		MountPath: "/etc/coredns",
 	})
 }
 
