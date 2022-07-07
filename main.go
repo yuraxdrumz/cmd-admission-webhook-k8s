@@ -68,14 +68,14 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		UID: in.UID,
 	}
 
-	s.logger.Infof("Incoming request: %+v", in)
-	defer s.logger.Infof("Outgoing response: %+v", resp)
+	s.logger.Infof("Incoming request: kind, %+v, Name %+v, Namespace %+v", in.Kind, in.Name, in.Namespace)
+	// defer s.logger.Infof("Outgoing response: %+v", resp)
 
 	if in.Operation != admissionv1.Create {
 		resp.Allowed = true
 		return resp
 	}
-
+	s.logger.Infof("Unmarshall in of kind %s", in.Kind.Kind)
 	p, metaPtr, spec := s.unmarshal(in)
 	if spec == nil {
 		resp.Allowed = true
@@ -84,6 +84,7 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 	annotation := metaPtr.Annotations[s.config.Annotation]
 
 	if annotation != "" {
+		s.logger.Infof("%v annotation is present ", s.config.Annotation)
 		bytes, err := json.Marshal([]jsonpatch.JsonPatchOperation{
 			s.createInitContainerPatch(p, annotation, spec.InitContainers),
 			s.createContainerPatch(p, annotation, spec.Containers),
@@ -91,6 +92,7 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 			s.createLabelPatch(p, metaPtr.Labels),
 		})
 		if err != nil {
+			s.logger.Info("Some error happened")
 			resp.Result = &v1.Status{
 				Status: err.Error(),
 			}
@@ -102,6 +104,7 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 	}
 
 	resp.Allowed = true
+	s.logger.Infof("Response")
 	return resp
 }
 
