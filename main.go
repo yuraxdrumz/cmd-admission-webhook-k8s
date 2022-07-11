@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -69,7 +68,7 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 	}
 
 	s.logger.Infof("Incoming request: kind, %+v, Name %+v, Namespace %+v", in.Kind, in.Name, in.Namespace)
-	// defer s.logger.Infof("Outgoing response: %+v", resp)
+	defer s.logger.Infof("Outgoing response: %+v", resp)
 
 	if in.Operation != admissionv1.Create {
 		resp.Allowed = true
@@ -146,7 +145,6 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		podMetaPtr = &replicaSet.Spec.Template.ObjectMeta
 		podSpec = &replicaSet.Spec.Template.Spec
 		target = &replicaSet
-
 	default:
 		return "", nil, nil
 	}
@@ -159,33 +157,24 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		podMetaPtr.Labels = make(map[string]string)
 	}
 	// Annotations shouldn't be applied second time.
-	if isReplicaOwnedByDeployment(in.Kind.Kind, metaPtr) {
-		return "", nil, nil
-	}
-	updatePodAnnotations(in.Kind.Kind, metaPtr, podMetaPtr)
-
-	return p, podMetaPtr, podSpec
-}
-
-func isReplicaOwnedByDeployment(kind string, metaPtr *v1.ObjectMeta) bool {
-	if kind == replicaSetKind {
+	if in.Kind.Kind == replicaSetKind {
 		for _, o := range metaPtr.OwnerReferences {
 			if o.Kind == deploymentKind {
-				return true
+				return "", nil, nil
 			}
 		}
 	}
-	return false
-}
 
-func updatePodAnnotations(kind string, metaPtr, podMetaPtr *v1.ObjectMeta) {
-	if kind != podKind && metaPtr.Annotations != nil {
-		if podMetaPtr.Annotations == nil {
-			podMetaPtr.Annotations = metaPtr.Annotations
+	func() {
+		if in.Kind.Kind != podKind && metaPtr.Annotations != nil {
+			if podMetaPtr.Annotations == nil {
+				podMetaPtr.Annotations = metaPtr.Annotations
+			}
+			s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
 		}
-		err := errors.New("can't register a sink factory for empty string")
-		panic(err.Error())
-	}
+	}()
+
+	return p, podMetaPtr, podSpec
 }
 
 func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.Volume) jsonpatch.JsonPatchOperation {
