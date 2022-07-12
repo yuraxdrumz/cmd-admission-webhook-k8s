@@ -106,8 +106,7 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 
 func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p string, meta *v1.ObjectMeta, spec *corev1.PodSpec) {
 	var podSpec *corev1.PodSpec
-	var podMetaPtr *v1.ObjectMeta
-	var metaPtr *v1.ObjectMeta
+	var metaPtr, podMetaPtr *v1.ObjectMeta
 	var target interface{}
 	p = "/spec/template"
 	switch in.Kind.Kind {
@@ -148,7 +147,6 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 	if err := json.Unmarshal(in.Object.Raw, target); err != nil {
 		return "", nil, nil
 	}
-	p = path.Join("/", p)
 	if podMetaPtr.Labels == nil {
 		podMetaPtr.Labels = make(map[string]string)
 	}
@@ -161,16 +159,14 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		}
 	}
 
-	func() {
-		if in.Kind.Kind != podKind && metaPtr.Annotations != nil {
-			if podMetaPtr.Annotations == nil {
-				podMetaPtr.Annotations = metaPtr.Annotations
-			}
-			s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
+	if in.Kind.Kind != podKind && metaPtr.Annotations != nil {
+		if podMetaPtr.Annotations == nil {
+			podMetaPtr.Annotations = metaPtr.Annotations
 		}
-	}()
+		s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
+	}
 
-	return p, podMetaPtr, podSpec
+	return path.Join("/", p), podMetaPtr, podSpec
 }
 
 func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.Volume) jsonpatch.JsonPatchOperation {
