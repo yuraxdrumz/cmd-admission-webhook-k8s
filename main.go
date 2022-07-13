@@ -140,10 +140,18 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		podMetaPtr = &replicaSet.Spec.Template.ObjectMeta
 		podSpec = &replicaSet.Spec.Template.Spec
 		target = &replicaSet
+		defer func() {
+			s.logger.Info("Replicaset Defer method")
+			for _, o := range metaPtr.OwnerReferences {
+				if o.Kind == deploymentKind {
+					p, meta, spec = "", nil, nil
+				}
+			}
+		}()
+
 	default:
 		return "", nil, nil
 	}
-
 	if err := json.Unmarshal(in.Object.Raw, target); err != nil {
 		return "", nil, nil
 	}
@@ -151,19 +159,12 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		podMetaPtr.Labels = make(map[string]string)
 	}
 	// Annotations shouldn't be applied second time.
-	if in.Kind.Kind == replicaSetKind {
-		for _, o := range metaPtr.OwnerReferences {
-			if o.Kind == deploymentKind {
-				return "", nil, nil
-			}
-		}
-	}
-
 	if in.Kind.Kind != podKind && metaPtr.Annotations != nil {
 		if podMetaPtr.Annotations == nil {
 			podMetaPtr.Annotations = metaPtr.Annotations
+		} else {
+			s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
 		}
-		s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
 	}
 
 	return path.Join("/", p), podMetaPtr, podSpec
