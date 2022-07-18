@@ -75,19 +75,25 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 
-	p, metaPtr, spec := s.unmarshal(in)
+	metaPtr, podMetaPtr, spec := s.unmarshal(in)
+	p := ""
+	if in.Kind.Kind != podKind {
+		p = "/spec/template"
+	}
+	p = path.Join("/", p)
+	podMetaPtr = s.postProcessPodMeta(podMetaPtr, metaPtr, in.Kind.Kind)
 	if spec == nil {
 		resp.Allowed = true
 		return resp
 	}
-	annotation := metaPtr.Annotations[s.config.Annotation]
+	annotation := podMetaPtr.Annotations[s.config.Annotation]
 
 	if annotation != "" {
 		bytes, err := json.Marshal([]jsonpatch.JsonPatchOperation{
 			s.createInitContainerPatch(p, annotation, spec.InitContainers),
 			s.createContainerPatch(p, annotation, spec.Containers),
 			s.createVolumesPatch(p, spec.Volumes),
-			s.createLabelPatch(p, metaPtr.Labels),
+			s.createLabelPatch(p, podMetaPtr.Labels),
 		})
 		if err != nil {
 			resp.Result = &v1.Status{
@@ -104,11 +110,8 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 	return resp
 }
 
-func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p string, meta *v1.ObjectMeta, spec *corev1.PodSpec) {
-	var podSpec *corev1.PodSpec
-	var metaPtr, podMetaPtr *v1.ObjectMeta
+func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (metaPtr, podMetaPtr *v1.ObjectMeta, podSpec *corev1.PodSpec) {
 	var target interface{}
-	p = "/spec/template"
 	switch in.Kind.Kind {
 	case deploymentKind:
 		var deployment appsv1.Deployment
@@ -118,7 +121,6 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		target = &deployment
 	case podKind:
 		var pod corev1.Pod
-		p = ""
 		podMetaPtr = &pod.ObjectMeta
 		podSpec = &pod.Spec
 		target = &pod
@@ -140,34 +142,35 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (p 
 		podMetaPtr = &replicaSet.Spec.Template.ObjectMeta
 		podSpec = &replicaSet.Spec.Template.Spec
 		target = &replicaSet
-		defer func() {
-			s.logger.Info("Replicaset Defer method")
-			for _, o := range metaPtr.OwnerReferences {
-				if o.Kind == deploymentKind {
-					p, meta, spec = "", nil, nil
-				}
-			}
-		}()
-
 	default:
-		return "", nil, nil
+		return nil, nil, nil
 	}
 	if err := json.Unmarshal(in.Object.Raw, target); err != nil {
-		return "", nil, nil
+		return nil, nil, nil
 	}
+	return metaPtr, podMetaPtr, podSpec
+}
+
+func (s *admissionWebhookServer) postProcessPodMeta(podMetaPtr, metaPtr *v1.ObjectMeta, kind string) *v1.ObjectMeta {
 	if podMetaPtr.Labels == nil {
 		podMetaPtr.Labels = make(map[string]string)
 	}
 	// Annotations shouldn't be applied second time.
-	if in.Kind.Kind != podKind && metaPtr.Annotations != nil {
+	if kind != podKind && metaPtr.Annotations != nil {
 		if podMetaPtr.Annotations == nil {
 			podMetaPtr.Annotations = metaPtr.Annotations
 		} else {
 			s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
 		}
 	}
-
-	return path.Join("/", p), podMetaPtr, podSpec
+	if kind == replicaSetKind {
+		for _, o := range metaPtr.OwnerReferences {
+			if o.Kind == deploymentKind {
+				return nil
+			}
+		}
+	}
+	return podMetaPtr
 }
 
 func (s *admissionWebhookServer) createVolumesPatch(p string, volumes []corev1.Volume) jsonpatch.JsonPatchOperation {
