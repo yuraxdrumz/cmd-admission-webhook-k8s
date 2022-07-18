@@ -49,7 +49,6 @@ type Config struct {
 	KeyFilePath           string            `desc:"Path to RSA/Ed25519 related to Config.CertFilePath" split_words:"true"`
 	CABundleFilePath      string            `desc:"Path to cabundle file related to Config.CertFilePath" split_words:"true"`
 	OpenTelemetryEndpoint string            `default:"otel-collector.observability.svc.cluster.local:4317" desc:"OpenTelemetry Collector Endpoint"`
-	CorednsSidecarImage   string            `default:"ghcr.io/networkservicemesh/coredns:v1.9.1" desc:"Coredns sidecar image"`
 	envs                  []corev1.EnvVar
 	caBundle              []byte
 	cert                  tls.Certificate
