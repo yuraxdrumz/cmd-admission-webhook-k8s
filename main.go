@@ -56,12 +56,6 @@ type admissionWebhookServer struct {
 	logger *zap.SugaredLogger
 }
 
-const (
-	deploymentKind string = "Deployment"
-	podKind        string = "Pod"
-	replicaSetKind string = "ReplicaSet"
-)
-
 func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
 	var resp = &admissionv1.AdmissionResponse{
 		UID: in.UID,
@@ -75,13 +69,13 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 
-	metaPtr, podMetaPtr, spec := s.unmarshal(in)
+	podMetaPtr, spec := s.unmarshal(in)
 	p := ""
-	if in.Kind.Kind != podKind {
+	if in.Kind.Kind != "Pod" {
 		p = "/spec/template"
 	}
 	p = path.Join("/", p)
-	podMetaPtr = s.postProcessPodMeta(podMetaPtr, metaPtr, in.Kind.Kind)
+
 	if spec == nil {
 		resp.Allowed = true
 		return resp
@@ -110,16 +104,17 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 	return resp
 }
 
-func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (metaPtr, podMetaPtr *v1.ObjectMeta, podSpec *corev1.PodSpec) {
+func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (podMetaPtr *v1.ObjectMeta, podSpec *corev1.PodSpec) {
 	var target interface{}
+	var metaPtr *v1.ObjectMeta
 	switch in.Kind.Kind {
-	case deploymentKind:
+	case "Deployment":
 		var deployment appsv1.Deployment
 		metaPtr = &deployment.ObjectMeta
 		podMetaPtr = &deployment.Spec.Template.ObjectMeta
 		podSpec = &deployment.Spec.Template.Spec
 		target = &deployment
-	case podKind:
+	case "Pod":
 		var pod corev1.Pod
 		podMetaPtr = &pod.ObjectMeta
 		podSpec = &pod.Spec
@@ -136,19 +131,20 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (me
 		podMetaPtr = &statefulSet.Spec.Template.ObjectMeta
 		podSpec = &statefulSet.Spec.Template.Spec
 		target = &statefulSet
-	case replicaSetKind:
+	case "ReplicaSet":
 		var replicaSet appsv1.ReplicaSet
 		metaPtr = &replicaSet.ObjectMeta
 		podMetaPtr = &replicaSet.Spec.Template.ObjectMeta
 		podSpec = &replicaSet.Spec.Template.Spec
 		target = &replicaSet
 	default:
-		return nil, nil, nil
+		return nil, nil
 	}
 	if err := json.Unmarshal(in.Object.Raw, target); err != nil {
-		return nil, nil, nil
+		return nil, nil
 	}
-	return metaPtr, podMetaPtr, podSpec
+	podMetaPtr = s.postProcessPodMeta(podMetaPtr, metaPtr, in.Kind.Kind)
+	return podMetaPtr, podSpec
 }
 
 func (s *admissionWebhookServer) postProcessPodMeta(podMetaPtr, metaPtr *v1.ObjectMeta, kind string) *v1.ObjectMeta {
@@ -156,16 +152,16 @@ func (s *admissionWebhookServer) postProcessPodMeta(podMetaPtr, metaPtr *v1.Obje
 		podMetaPtr.Labels = make(map[string]string)
 	}
 	// Annotations shouldn't be applied second time.
-	if kind != podKind && metaPtr.Annotations != nil {
+	if kind != "Pod" {
 		if podMetaPtr.Annotations == nil {
 			podMetaPtr.Annotations = metaPtr.Annotations
 		} else {
 			s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
 		}
 	}
-	if kind == replicaSetKind {
+	if kind == "ReplicaSet" {
 		for _, o := range metaPtr.OwnerReferences {
-			if o.Kind == deploymentKind {
+			if o.Kind == "Deployment" {
 				return nil
 			}
 		}
