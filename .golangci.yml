@@ -40,7 +40,7 @@ linters-settings:
     Statements: 50
   goconst:
     min-len: 2
-    min-occurrences: 2
+    min-occurrences: 5
   depguard:
     list-type: blacklist
     include-go-root: false
