@@ -76,7 +76,7 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 	}
 	p = path.Join("/", p)
 
-	if spec == nil {
+	if spec == nil && podMetaPtr == nil {
 		resp.Allowed = true
 		return resp
 	}
@@ -144,6 +144,9 @@ func (s *admissionWebhookServer) unmarshal(in *admissionv1.AdmissionRequest) (po
 		return nil, nil
 	}
 	podMetaPtr = s.postProcessPodMeta(podMetaPtr, metaPtr, in.Kind.Kind)
+	if podMetaPtr == nil {
+		return nil, nil
+	}
 	return podMetaPtr, podSpec
 }
 
@@ -157,6 +160,7 @@ func (s *admissionWebhookServer) postProcessPodMeta(podMetaPtr, metaPtr *v1.Obje
 			podMetaPtr.Annotations = metaPtr.Annotations
 		} else {
 			s.logger.Errorf("Malformed specification. Annotations can't be provided in several places.")
+			return nil
 		}
 	}
 	if kind == "ReplicaSet" {
