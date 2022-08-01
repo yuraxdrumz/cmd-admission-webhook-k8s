@@ -49,6 +49,7 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/opentelemetry"
 )
 
+var namespace_annotations map[string]map[string]string
 var deserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
 
 type admissionWebhookServer struct {
@@ -69,6 +70,21 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 
+	if in.Kind.Kind == "Namespace" {
+		var namespace_kind corev1.Namespace
+		// var target interface{}
+		target := &namespace_kind
+		labels := &namespace_kind.ObjectMeta.Labels
+		if err := json.Unmarshal(in.Object.Raw, target); err != nil {
+			resp.Result = &v1.Status{
+				Status: err.Error(),
+			}
+			return resp
+		}
+		namespace_annotations[in.Name] = *labels
+		return resp
+	}
+
 	podMetaPtr, spec := s.unmarshal(in)
 	p := ""
 	if in.Kind.Kind != "Pod" {
@@ -81,6 +97,11 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 	annotation := podMetaPtr.Annotations[s.config.Annotation]
+	if _, ok := namespace_annotations[in.Namespace]; ok {
+		for k, v := range namespace_annotations[in.Namespace] {
+			annotation = annotation + "," + k + v
+		}
+	}
 
 	if annotation != "" {
 		bytes, err := json.Marshal([]jsonpatch.JsonPatchOperation{
