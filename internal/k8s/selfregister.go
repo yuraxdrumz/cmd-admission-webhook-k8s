@@ -92,7 +92,7 @@ func (a *AdmissionWebhookRegisterClient) Register(ctx context.Context, c *config
 						Rule: admissionv1.Rule{
 							APIGroups:   []string{""},
 							APIVersions: []string{"v1"},
-							Resources:   []string{"pods"},
+							Resources:   []string{"pods", "namespaces"},
 						},
 					},
 					{
@@ -100,31 +100,7 @@ func (a *AdmissionWebhookRegisterClient) Register(ctx context.Context, c *config
 						Rule: admissionv1.Rule{
 							APIGroups:   []string{"apps"},
 							APIVersions: []string{"v1"},
-							Resources:   []string{"deployments"},
-						},
-					},
-					{
-						Operations: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
-						Rule: admissionv1.Rule{
-							APIGroups:   []string{"apps"},
-							APIVersions: []string{"v1"},
-							Resources:   []string{"statefulsets"},
-						},
-					},
-					{
-						Operations: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
-						Rule: admissionv1.Rule{
-							APIGroups:   []string{"apps"},
-							APIVersions: []string{"v1"},
-							Resources:   []string{"daemonsets"},
-						},
-					},
-					{
-						Operations: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
-						Rule: admissionv1.Rule{
-							APIGroups:   []string{"apps"},
-							APIVersions: []string{"v1"},
-							Resources:   []string{"replicasets"},
+							Resources:   []string{"deployments", "statefulsets", "daemonsets", "replicasets"},
 						},
 					},
 				},

@@ -49,12 +49,12 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/opentelemetry"
 )
 
-var namespace_annotations map[string]map[string]string
 var deserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
 
 type admissionWebhookServer struct {
-	config *config.Config
-	logger *zap.SugaredLogger
+	config               *config.Config
+	logger               *zap.SugaredLogger
+	namespaceAnnotations map[string]string
 }
 
 func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
@@ -64,27 +64,26 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 
 	s.logger.Infof("Incoming request: %+v", in)
 	defer s.logger.Infof("Outgoing response: %+v", resp)
-
+	
+	// Review namespace to extract annotations if some are presented
+	if in.Kind.Kind == "Namespace" && (in.Operation == admissionv1.Create || in.Operation == admissionv1.Update) {
+		var namespace corev1.Namespace
+		target := &namespace
+		if err := json.Unmarshal(in.Object.Raw, target); err != nil {
+			return resp
+		}
+		// skip processing namespace with name to be generated
+		annotations := namespace.ObjectMeta.Annotations[s.config.Annotation]
+		if namespace.GetName() != "" && annotations != "" {
+			s.namespaceAnnotations[namespace.GetName()] = annotations
+		}
+		resp.Allowed = true
+		return resp
+	}
 	if in.Operation != admissionv1.Create {
 		resp.Allowed = true
 		return resp
 	}
-
-	if in.Kind.Kind == "Namespace" {
-		var namespace_kind corev1.Namespace
-		// var target interface{}
-		target := &namespace_kind
-		labels := &namespace_kind.ObjectMeta.Labels
-		if err := json.Unmarshal(in.Object.Raw, target); err != nil {
-			resp.Result = &v1.Status{
-				Status: err.Error(),
-			}
-			return resp
-		}
-		namespace_annotations[in.Name] = *labels
-		return resp
-	}
-
 	podMetaPtr, spec := s.unmarshal(in)
 	p := ""
 	if in.Kind.Kind != "Pod" {
@@ -97,10 +96,10 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 	annotation := podMetaPtr.Annotations[s.config.Annotation]
-	if _, ok := namespace_annotations[in.Namespace]; ok {
-		for k, v := range namespace_annotations[in.Namespace] {
-			annotation = annotation + "," + k + v
-		}
+	
+	// use namespace annotation only if resource doesn't have it's own
+	if nsAnnotations, ok := s.namespaceAnnotations[in.Namespace]; annotation == "" && ok {
+		annotation = nsAnnotations
 	}
 
 	if annotation != "" {
@@ -365,8 +364,9 @@ func main() {
 	s.Use(middleware.Recover())
 
 	var handler = &admissionWebhookServer{
-		config: conf,
-		logger: logger.Named("admissionWebhookServer"),
+		config:               conf,
+		logger:               logger.Named("admissionWebhookServer"),
+		namespaceAnnotations: make(map[string]string),
 	}
 
 	s.POST("/mutate", func(c echo.Context) error {
