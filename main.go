@@ -42,6 +42,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/config"
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/k8s"
@@ -52,34 +54,19 @@ import (
 var deserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
 
 type admissionWebhookServer struct {
-	config               *config.Config
-	logger               *zap.SugaredLogger
-	namespaceAnnotations map[string]string
+	config    *config.Config
+	logger    *zap.SugaredLogger
+	clientset *kubernetes.Clientset
 }
 
-func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
+func (s *admissionWebhookServer) Review(ctx context.Context, in *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
 	var resp = &admissionv1.AdmissionResponse{
 		UID: in.UID,
 	}
 
 	s.logger.Infof("Incoming request: %+v", in)
 	defer s.logger.Infof("Outgoing response: %+v", resp)
-	
-	// Review namespace to extract annotations if some are presented
-	if in.Kind.Kind == "Namespace" && (in.Operation == admissionv1.Create || in.Operation == admissionv1.Update) {
-		var namespace corev1.Namespace
-		target := &namespace
-		if err := json.Unmarshal(in.Object.Raw, target); err != nil {
-			return resp
-		}
-		// skip processing namespace with name to be generated
-		annotations := namespace.ObjectMeta.Annotations[s.config.Annotation]
-		if namespace.GetName() != "" && annotations != "" {
-			s.namespaceAnnotations[namespace.GetName()] = annotations
-		}
-		resp.Allowed = true
-		return resp
-	}
+
 	if in.Operation != admissionv1.Create {
 		resp.Allowed = true
 		return resp
@@ -96,10 +83,14 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 	annotation := podMetaPtr.Annotations[s.config.Annotation]
-	
+
 	// use namespace annotation only if resource doesn't have it's own
-	if nsAnnotations, ok := s.namespaceAnnotations[in.Namespace]; annotation == "" && ok {
-		annotation = nsAnnotations
+	if annotation == "" {
+		namespace, err := s.clientset.CoreV1().Namespaces().Get(ctx, in.Namespace, v1.GetOptions{})
+		if err != nil {
+			s.logger.Errorf("failed to get namespace by name", err)
+		}
+		annotation = namespace.Annotations[s.config.Annotation]
 	}
 
 	if annotation != "" {
@@ -303,6 +294,18 @@ func (s *admissionWebhookServer) createLabelPatch(p string, v map[string]string)
 	return jsonpatch.NewOperation("add", path.Join(p, "metadata", "labels"), v)
 }
 
+func getClientSet() *kubernetes.Clientset {
+	c, err := rest.InClusterConfig()
+	if err != nil {
+		panic(err.Error())
+	}
+	clientset, err := kubernetes.NewForConfig(c)
+	if err != nil {
+		panic(err.Error())
+	}
+	return clientset
+}
+
 func main() {
 	prod, err := zap.NewProduction()
 
@@ -364,9 +367,9 @@ func main() {
 	s.Use(middleware.Recover())
 
 	var handler = &admissionWebhookServer{
-		config:               conf,
-		logger:               logger.Named("admissionWebhookServer"),
-		namespaceAnnotations: make(map[string]string),
+		config:    conf,
+		logger:    logger.Named("admissionWebhookServer"),
+		clientset: getClientSet(),
 	}
 
 	s.POST("/mutate", func(c echo.Context) error {
@@ -381,7 +384,7 @@ func main() {
 			return err
 		}
 
-		review.Response = handler.Review(review.Request)
+		review.Response = handler.Review(ctx, review.Request)
 
 		response, err := json.Marshal(review)
 		if err != nil {

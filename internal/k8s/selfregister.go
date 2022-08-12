@@ -92,7 +92,7 @@ func (a *AdmissionWebhookRegisterClient) Register(ctx context.Context, c *config
 						Rule: admissionv1.Rule{
 							APIGroups:   []string{""},
 							APIVersions: []string{"v1"},
-							Resources:   []string{"pods", "namespaces"},
+							Resources:   []string{"pods"},
 						},
 					},
 					{
