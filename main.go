@@ -43,10 +43,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/config"
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/k8s"
+	kubeutils "github.com/networkservicemesh/sdk-k8s/pkg/tools/k8s"
 	"github.com/networkservicemesh/sdk/pkg/tools/nsurl"
 	"github.com/networkservicemesh/sdk/pkg/tools/opentelemetry"
 )
@@ -294,18 +294,6 @@ func (s *admissionWebhookServer) createLabelPatch(p string, v map[string]string)
 	return jsonpatch.NewOperation("add", path.Join(p, "metadata", "labels"), v)
 }
 
-func getClientSet() *kubernetes.Clientset {
-	c, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
-	}
-	clientset, err := kubernetes.NewForConfig(c)
-	if err != nil {
-		panic(err.Error())
-	}
-	return clientset
-}
-
 func main() {
 	prod, err := zap.NewProduction()
 
@@ -365,11 +353,18 @@ func main() {
 	s := echo.New()
 	s.Use(middleware.Logger())
 	s.Use(middleware.Recover())
-
+	_, restConfig, err := kubeutils.NewVersionedClient()
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
 	var handler = &admissionWebhookServer{
 		config:    conf,
 		logger:    logger.Named("admissionWebhookServer"),
-		clientset: getClientSet(),
+		clientset: clientset,
 	}
 
 	s.POST("/mutate", func(c echo.Context) error {
@@ -385,7 +380,6 @@ func main() {
 		}
 
 		review.Response = handler.Review(ctx, review.Request)
-
 		response, err := json.Marshal(review)
 		if err != nil {
 			return err
