@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/labstack/echo/v4"
@@ -42,9 +43,11 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/config"
 	"github.com/networkservicemesh/cmd-admission-webhook/internal/k8s"
+	kubeutils "github.com/networkservicemesh/sdk-k8s/pkg/tools/k8s"
 	"github.com/networkservicemesh/sdk/pkg/tools/nsurl"
 	"github.com/networkservicemesh/sdk/pkg/tools/opentelemetry"
 )
@@ -52,11 +55,12 @@ import (
 var deserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
 
 type admissionWebhookServer struct {
-	config *config.Config
-	logger *zap.SugaredLogger
+	config    *config.Config
+	logger    *zap.SugaredLogger
+	clientset *kubernetes.Clientset
 }
 
-func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
+func (s *admissionWebhookServer) Review(ctx context.Context, in *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
 	var resp = &admissionv1.AdmissionResponse{
 		UID: in.UID,
 	}
@@ -68,7 +72,6 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		resp.Allowed = true
 		return resp
 	}
-
 	podMetaPtr, spec := s.unmarshal(in)
 	p := ""
 	if in.Kind.Kind != "Pod" {
@@ -81,6 +84,17 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		return resp
 	}
 	annotation := podMetaPtr.Annotations[s.config.Annotation]
+
+	// use namespace annotation only if resource doesn't have it's own
+	if annotation == "" {
+		timeoutCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		namespace, err := s.clientset.CoreV1().Namespaces().Get(timeoutCtx, in.Namespace, v1.GetOptions{})
+		if err != nil {
+			s.logger.Errorf("failed to get namespace by name", err)
+		}
+		annotation = namespace.Annotations[s.config.Annotation]
+	}
 
 	if annotation != "" {
 		bytes, err := json.Marshal([]jsonpatch.JsonPatchOperation{
@@ -342,10 +356,18 @@ func main() {
 	s := echo.New()
 	s.Use(middleware.Logger())
 	s.Use(middleware.Recover())
-
+	_, restConfig, err := kubeutils.NewVersionedClient()
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
 	var handler = &admissionWebhookServer{
-		config: conf,
-		logger: logger.Named("admissionWebhookServer"),
+		config:    conf,
+		logger:    logger.Named("admissionWebhookServer"),
+		clientset: clientset,
 	}
 
 	s.POST("/mutate", func(c echo.Context) error {
@@ -360,8 +382,7 @@ func main() {
 			return err
 		}
 
-		review.Response = handler.Review(review.Request)
-
+		review.Response = handler.Review(ctx, review.Request)
 		response, err := json.Marshal(review)
 		if err != nil {
 			return err
