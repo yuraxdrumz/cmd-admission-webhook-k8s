@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/labstack/echo/v4"
@@ -86,7 +87,9 @@ func (s *admissionWebhookServer) Review(ctx context.Context, in *admissionv1.Adm
 
 	// use namespace annotation only if resource doesn't have it's own
 	if annotation == "" {
-		namespace, err := s.clientset.CoreV1().Namespaces().Get(ctx, in.Namespace, v1.GetOptions{})
+		timeoutCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		namespace, err := s.clientset.CoreV1().Namespaces().Get(timeoutCtx, in.Namespace, v1.GetOptions{})
 		if err != nil {
 			s.logger.Errorf("failed to get namespace by name", err)
 		}
