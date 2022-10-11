@@ -327,8 +327,7 @@ func main() {
 	)
 	defer cancel()
 
-	// Configure Open Telemetry
-	if opentelemetry.IsEnabled() {
+	if opentelemetry.IsEnabled() { // Configure Open Telemetry
 		collectorAddress := conf.OpenTelemetryEndpoint
 		spanExporter := opentelemetry.InitSpanExporter(ctx, collectorAddress)
 		metricExporter := opentelemetry.InitMetricExporter(ctx, collectorAddress)
@@ -387,9 +386,7 @@ func main() {
 		if err != nil {
 			return err
 		}
-
 		_, err = c.Response().Write(response)
-
 		return err
 	})
 	s.GET("/ready", func(c echo.Context) error {
@@ -405,6 +402,7 @@ func main() {
 			// #nosec
 			TLSConfig: &tls.Config{
 				Certificates: certs,
+				MinVersion:   tls.VersionTLS12,
 			},
 		}
 		startServerErr <- s.StartServer(server)
