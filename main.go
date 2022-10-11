@@ -405,6 +405,7 @@ func main() {
 			// #nosec
 			TLSConfig: &tls.Config{
 				Certificates: certs,
+				MinVersion:   tls.VersionTLS12,
 			},
 		}
 		startServerErr <- s.StartServer(server)
