@@ -85,12 +85,12 @@ func (s *admissionWebhookServer) Review(ctx context.Context, in *admissionv1.Adm
 	}
 	annotation := podMetaPtr.Annotations[s.config.Annotation]
 
-	// use namespace annotation only if resource doesn't have it's own
 	if annotation == "" && in.Kind.Kind != "Pod" {
 		resp.Allowed = true
 		return resp
 	}
 
+	// use namespace annotation only if resource doesn't have it's own
 	if annotation == "" && in.Kind.Kind == "Pod" {
 		timeoutCtx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
