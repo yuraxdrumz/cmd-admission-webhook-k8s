@@ -399,13 +399,14 @@ func main() {
 
 	var startServerErr = make(chan error)
 	go func() {
-		var certs = append([]tls.Certificate(nil), conf.GetOrResolveCertificate())
-
 		var server = &http.Server{
 			Addr: ":443",
 			// #nosec
 			TLSConfig: &tls.Config{
-				Certificates: certs,
+				GetCertificate: func(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error){
+					cert := conf.GetOrResolveCertificate()
+					return &cert, nil
+				},
 				MinVersion:   tls.VersionTLS12,
 			},
 		}

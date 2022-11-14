@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -115,6 +116,7 @@ func (c *Config) initializeCABundle() {
 	if len(c.caBundle) != 0 {
 		return
 	}
+	logrus.Infof("reading ca bundle from %s", c.CABundleFilePath)
 	r, err := ioutil.ReadFile(c.CABundleFilePath)
 	if err != nil {
 		panic(err.Error())
@@ -124,12 +126,15 @@ func (c *Config) initializeCABundle() {
 
 func (c *Config) initializeCert() {
 	if c.CertFilePath != "" && c.KeyFilePath != "" {
+		logrus.Debugf("loading existing key pair name from certFilePath=%s, keyFilePath=%s", c.CertFilePath, c.KeyFilePath)
 		cert, err := tls.LoadX509KeyPair(c.CertFilePath, c.KeyFilePath)
 		if err != nil {
 			panic(err.Error())
 		}
 		c.cert = cert
+		return
 	}
+	logrus.Debug("loading self signed in memory")
 	c.cert = c.selfSignedInMemoryCertificeate()
 }
 
